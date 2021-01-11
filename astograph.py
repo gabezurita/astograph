@@ -42,10 +42,12 @@ incmatch = re.compile(r'^include ?=> ?([^ ]+)')
 # Match Return() calls (consider this section as a macro)
 retmatch = re.compile(r',Return\(\)')
 # Peak at Gotos, make sure it's not in comments..
-gotomatch = re.compile(r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
+gotomatch = re.compile(
+    r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
 
 readfrom = sys.stdin
 readfrom = open('extensions.conf')
+
 
 def add_goto_context(curctx, newctx):
     """Just takes the ones with three arguments, and take the first.
@@ -64,6 +66,7 @@ def add_goto_context(curctx, newctx):
         if type1 not in links and type2 not in links:
             links.append((curctx, spl[0], 'dotted'))
 
+
 curctx = None
 for l in readfrom.readlines():
     # TODO: work out the comments (especially the multi-line comments)
@@ -78,7 +81,7 @@ for l in readfrom.readlines():
 
         if retctx in contexts:
             contexts.remove(retctx)
-            
+
         # TODO: to be turbo safe, we should check the `links` to make
         # sure nothing was included from this macro context, but usually,
         # if you've created them with AEL2, you should never have an `include`
@@ -105,7 +108,8 @@ for l in readfrom.readlines():
 
     if inc:
         if not curctx:
-            raise Exception("include should not happen before a context definition")
+            raise Exception(
+                "include should not happen before a context definition")
         incctx = inc.group(1)
 
         # Add the internal contexts if we talk about them (like parkedcalls)OA
@@ -138,15 +142,14 @@ for l in readfrom.readlines():
         else:
             chkctx = gto.group(4)
             add_goto_context(curctx, chkctx)
-            
-       
-        ### Add links with style=dotted
+
+        # Add links with style=dotted
         # make sure there's no ';' in front of the Goto
         # Check from the end the presence of a ? (got GotoIf), then parse the two possibilities, add two
         # Check the (curctx, gotoctx, '') doesn't exist in links (or as (curctx, gotoctx, 'style=dotted'))
         # then add it there..
 
-        
+
 dot = []
 dot.append('digraph asterisk {\n')
 #dot.append('  rankdir = LR;\n')
