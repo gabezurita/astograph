@@ -29,6 +29,10 @@ import pdb
 #       must be correctly split with commas (,)
 # TODO: add switch => support...
 
+# to execute this, run the following: ./astograph.py | dot -Tpng:cairo > graph.png
+
+# for debugging with `pdb.set_trace()`, simply run ./astograph.py
+
 internal_contexts = ['parkedcalls']
 
 
@@ -44,7 +48,8 @@ retmatch = re.compile(r',Return\(\)')
 # Peak at Gotos, make sure it's not in comments..
 gotomatch = re.compile(
     r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
-
+# match things like Macro(voxeoretry
+macromatch = re.compile(r'Macro\([a-zA-Z0-9_]*')
 readfrom = sys.stdin
 readfrom = open('extensions.conf')
 
@@ -57,14 +62,11 @@ def add_goto_context(curctx, newctx):
     global links
 
     spl = newctx.split(',')
+    type1 = (curctx, spl[0])
+    type2 = (curctx, spl[0], 'dotted')
 
-    if len(spl) == 3:
-        # This is a context where we jump
-        # TODO: add (curctx, spl[0], 'dotted')
-        type1 = (curctx, spl[0])
-        type2 = (curctx, spl[0], 'dotted')
-        if type1 not in links and type2 not in links:
-            links.append((curctx, spl[0], 'dotted'))
+    if type1 not in links and type2 not in links and newctx in contexts:
+        links.append((curctx, spl[0], 'dotted'))
 
 
 curctx = None
@@ -74,20 +76,7 @@ for l in readfrom.readlines():
     inc = incmatch.match(l)
     ret = retmatch.search(l)
     gto = gotomatch.search(l.strip())
-
-    if ret:
-        # Ok, we were in a Macro, make sure the context is not added.
-        retctx = curctx
-
-        if retctx in contexts:
-            contexts.remove(retctx)
-
-        # TODO: to be turbo safe, we should check the `links` to make
-        # sure nothing was included from this macro context, but usually,
-        # if you've created them with AEL2, you should never have an `include`
-        # in the macro (or the sub)
-
-        continue
+    mac = macromatch.search(l)
 
     if ctx:
         if ctx.group(1) in ['general', 'globals']:
@@ -95,10 +84,6 @@ for l in readfrom.readlines():
             continue
 
         curctx = ctx.group(1)
-
-        # Don't add macro- stuff.
-        if curctx.startswith('macro-'):
-            continue
 
         # Don't add it twice.
         if curctx not in contexts:
@@ -149,10 +134,25 @@ for l in readfrom.readlines():
         # Check the (curctx, gotoctx, '') doesn't exist in links (or as (curctx, gotoctx, 'style=dotted'))
         # then add it there..
 
+    if mac:
+        # TODO
+        # Skip commented out lines with Macro..
+        # if mac.group(1) == ';':
+        #     continue
+
+        chkctx = mac.group(0)
+        # e.g. chkctx = Macro(assert_refer_triaged'
+        # the below should update chkctx to equal macro macro-assert_refer_triaged
+        chkctx = chkctx.replace("(", "-").lower()
+
+        if chkctx not in contexts:
+            contexts.append(chkctx)
+
+        add_goto_context(curctx, chkctx)
+
 
 dot = []
 dot.append('digraph asterisk {\n')
-#dot.append('  rankdir = LR;\n')
 
 for x in contexts:
     dot.append('  "%s" [label="%s"];\n' % (x, x))
@@ -162,7 +162,10 @@ dot.append('\n')
 for x in links:
     add = ''
     if len(x) == 3:
-        add = ' [style="%s", constraint=false]' % x[2]
+        # TODO, the below is giving me diffuclties.
+        # for hierarchy to work, need some constraint=false, but not always
+        # add = ' [style="%s", constraint=false]' % x[2]
+        add = ' [style="%s"]' % x[2]
     dot.append('  "%s" -> "%s"%s;\n' % (x[0], x[1].strip(), add))
 
 dot.append('}\n')
