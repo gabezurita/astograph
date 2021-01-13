@@ -40,49 +40,49 @@ contexts = []
 links = []
 
 # Match context opening things..
-ctxmatch = re.compile(r'\[([^ ]+)\]')
+context_match = re.compile(r'\[([^ ]+)\]')
 # Match include calls..
-incmatch = re.compile(r'^include ?=> ?([^ ]+)')
+include_match = re.compile(r'^include ?=> ?([^ ]+)')
 # Match Return() calls (consider this section as a macro)
-retmatch = re.compile(r',Return\(\)')
+return_match = re.compile(r',Return\(\)')
 # Peak at Gotos, make sure it's not in comments..
-gotomatch = re.compile(
+goto_match = re.compile(
     r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
 # match things like Macro(voxeoretry
-macromatch = re.compile(r'Macro\([a-zA-Z0-9_]*')
+macro_match = re.compile(r'Macro\([a-zA-Z0-9_]*')
 readfrom = sys.stdin
 
 
-def add_goto_context(curctx, newctx):
+def add_goto_context(current_context, new_context):
     """Just takes the ones with three arguments, and take the first.
     Add only if valid and not already linked within 'links'."""
 
     global contexts
     global links
 
-    spl = newctx.split(',')
-    type1 = (curctx, spl[0])
-    type2 = (curctx, spl[0], 'dotted')
+    spl = new_context.split(',')
+    type1 = (current_context, spl[0])
+    type2 = (current_context, spl[0], 'dotted')
 
-    if type1 not in links and type2 not in links and newctx in contexts:
-        links.append((curctx, spl[0], 'dotted'))
+    if type1 not in links and type2 not in links and new_context in contexts:
+        links.append((current_context, spl[0], 'dotted'))
 
 
-curctx = None
-for l in readfrom.readlines():
+current_context = None
+for line in readfrom.readlines():
     # TODO: work out the comments (especially the multi-line comments)
-    ctx = ctxmatch.match(l)
-    inc = incmatch.match(l)
-    ret = retmatch.search(l)
-    gto = gotomatch.search(l.strip())
-    mac = macromatch.search(l)
+    ctx = context_match.match(line)
+    inc = include_match.match(line)
+    ret = return_match.search(line)
+    gto = goto_match.search(line.strip())
+    mac = macro_match.search(line)
 
     if ret:
         # Ok, we were in a Macro, make sure the context is not added.
-        retctx = curctx
+        return_context = current_context
 
-        if retctx in contexts:
-            contexts.remove(retctx)
+        if return_context in contexts:
+            contexts.remove(return_context)
 
         # TODO: to be turbo safe, we should check the `links` to make
         # sure nothing was included from this macro context, but usually,
@@ -93,19 +93,19 @@ for l in readfrom.readlines():
 
     if ctx:
         if ctx.group(1) in ['general', 'globals']:
-            curctx = None
+            current_context = None
             continue
 
-        curctx = ctx.group(1)
+        current_context = ctx.group(1)
 
         # Don't add it twice.
-        if curctx not in contexts:
-            contexts.append(curctx)
+        if current_context not in contexts:
+            contexts.append(current_context)
 
         continue
 
     if inc:
-        if not curctx:
+        if not current_context:
             raise Exception(
                 "include should not happen before a context definition")
         incctx = inc.group(1)
@@ -114,7 +114,7 @@ for l in readfrom.readlines():
         if incctx in internal_contexts and incctx not in contexts:
             contexts.append(incctx)
 
-        links.append((curctx, incctx))
+        links.append((current_context, incctx))
 
         continue
 
@@ -126,25 +126,25 @@ for l in readfrom.readlines():
         # Let's parse TIME stuff..
         if gto.group(3):
             chkctx = gto.group(4).split('?')[-1]
-            add_goto_context(curctx, chkctx)
+            add_goto_context(current_context, chkctx)
         # Let's do GotoIf parsing..
         elif gto.group(2):
             chks = gto.group(4).split('?')[-1].split(':')
-            add_goto_context(curctx, chks[0])
+            add_goto_context(current_context, chks[0])
 
             # A second possible destination ?
             if len(chks) == 2:
-                add_goto_context(curctx, chks[1])
+                add_goto_context(current_context, chks[1])
 
         # Standard Goto parsing.. go ahead..
         else:
             chkctx = gto.group(4)
-            add_goto_context(curctx, chkctx)
+            add_goto_context(current_context, chkctx)
 
         # Add links with style=dotted
         # make sure there's no ';' in front of the Goto
         # Check from the end the presence of a ? (got GotoIf), then parse the two possibilities, add two
-        # Check the (curctx, gotoctx, '') doesn't exist in links (or as (curctx, gotoctx, 'style=dotted'))
+        # Check the (current_context, gotoctx, '') doesn't exist in links (or as (current_context, gotoctx, 'style=dotted'))
         # then add it there..
 
     if mac:
@@ -161,7 +161,7 @@ for l in readfrom.readlines():
         if chkctx not in contexts:
             contexts.append(chkctx)
 
-        add_goto_context(curctx, chkctx)
+        add_goto_context(current_context, chkctx)
 
 
 dot = []
