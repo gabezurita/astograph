@@ -55,7 +55,7 @@ agi_match = re.compile(r'AGI\([a-zA-Z0-9_]*')
 readfrom = sys.stdin
 
 
-def add_goto_context(current_context, new_context):
+def add_link(current_context, new_context):
     """Just takes the ones with three arguments, and take the first.
     Add only if valid and not already linked within 'links'."""
 
@@ -75,6 +75,15 @@ def already_linked(current_context, new_context):
     type2 = (current_context, new_context[0], 'dotted')
 
     return type1 in links or type2 in links
+
+
+def format_context(context):
+    return context.replace("(", "-").lower()
+
+
+def add_context(current_context, contexts):
+    if current_context not in contexts:
+        contexts.append(current_context)
 
 
 current_context = None
@@ -108,9 +117,7 @@ for line in readfrom.readlines():
 
         current_context = ctx.group(1)
 
-        # Don't add it twice.
-        if current_context not in contexts:
-            contexts.append(current_context)
+        add_context(current_context, contexts)
 
         continue
 
@@ -136,20 +143,20 @@ for line in readfrom.readlines():
         # Let's parse TIME stuff..
         if gto.group(3):
             chkctx = gto.group(4).split('?')[-1]
-            add_goto_context(current_context, chkctx)
+            add_link(current_context, chkctx)
         # Let's do GotoIf parsing..
         elif gto.group(2):
             chks = gto.group(4).split('?')[-1].split(':')
-            add_goto_context(current_context, chks[0])
+            add_link(current_context, chks[0])
 
             # A second possible destination ?
             if len(chks) == 2:
-                add_goto_context(current_context, chks[1])
+                add_link(current_context, chks[1])
 
         # Standard Goto parsing.. go ahead..
         else:
             chkctx = gto.group(4)
-            add_goto_context(current_context, chkctx)
+            add_link(current_context, chkctx)
 
         # Add links with style=dotted
         # make sure there's no ';' in front of the Goto
@@ -166,23 +173,21 @@ for line in readfrom.readlines():
         chkctx = mac.group(0)
         # e.g. chkctx = Macro(assert_refer_triaged'
         # the below should update chkctx to equal macro macro-assert_refer_triaged
-        chkctx = chkctx.replace("(", "-").lower()
+        chkctx = format_context(chkctx)
 
-        if chkctx not in contexts:
-            contexts.append(chkctx)
+        add_context(chkctx, contexts)
 
-        add_goto_context(current_context, chkctx)
+        add_link(current_context, chkctx)
 
     if agi:
         chkctx = agi.group(0)
         # e.g. chkctx = Macro(assert_refer_triaged'
         # the below should update chkctx to equal macro macro-assert_refer_triaged
-        chkctx = chkctx.replace("(", "-").lower()
+        chkctx = format_context(chkctx)
 
-        if chkctx not in contexts:
-            contexts.append(chkctx)
+        add_context(chkctx, contexts)
 
-        add_goto_context(current_context, chkctx)
+        add_link(current_context, chkctx)
 
 
 dot = []
