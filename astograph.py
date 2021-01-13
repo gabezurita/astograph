@@ -80,6 +80,20 @@ for l in readfrom.readlines():
     gto = gotomatch.search(l.strip())
     mac = macromatch.search(l)
 
+    if ret:
+        # Ok, we were in a Macro, make sure the context is not added.
+        retctx = curctx
+
+        if retctx in contexts:
+            contexts.remove(retctx)
+
+        # TODO: to be turbo safe, we should check the `links` to make
+        # sure nothing was included from this macro context, but usually,
+        # if you've created them with AEL2, you should never have an `include`
+        # in the macro (or the sub)
+
+        continue
+
     if ctx:
         if ctx.group(1) in ['general', 'globals']:
             curctx = None
