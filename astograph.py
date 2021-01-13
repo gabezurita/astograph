@@ -62,12 +62,19 @@ def add_goto_context(current_context, new_context):
     global contexts
     global links
 
-    spl = new_context.split(',')
-    type1 = (current_context, spl[0])
-    type2 = (current_context, spl[0], 'dotted')
+    new_context_split = new_context.split(',')
 
-    if type1 not in links and type2 not in links and new_context in contexts:
-        links.append((current_context, spl[0], 'dotted'))
+    if not already_linked(current_context, new_context_split) and new_context in contexts:
+        links.append((current_context, new_context_split[0], 'dotted'))
+
+
+def already_linked(current_context, new_context):
+    global links
+
+    type1 = (current_context, new_context[0])
+    type2 = (current_context, new_context[0], 'dotted')
+
+    return type1 in links or type2 in links
 
 
 current_context = None
