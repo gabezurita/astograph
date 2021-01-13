@@ -47,8 +47,11 @@ return_match = re.compile(r',Return\(\)')
 # Peak at Gotos, make sure it's not in comments..
 goto_match = re.compile(
     r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
-# match things like Macro(voxeoretry
+# Match Macro calls
 macro_match = re.compile(r'Macro\([a-zA-Z0-9_]*')
+# Match AGI calls
+agi_match = re.compile(r'AGI\([a-zA-Z0-9_]*')
+
 readfrom = sys.stdin
 
 
@@ -75,6 +78,7 @@ for line in readfrom.readlines():
     ret = return_match.search(line)
     gto = goto_match.search(line.strip())
     mac = macro_match.search(line)
+    agi = agi_match.search(line)
 
     if ret:
         # Ok, we were in a Macro, make sure the context is not added.
@@ -153,6 +157,17 @@ for line in readfrom.readlines():
         #     continue
 
         chkctx = mac.group(0)
+        # e.g. chkctx = Macro(assert_refer_triaged'
+        # the below should update chkctx to equal macro macro-assert_refer_triaged
+        chkctx = chkctx.replace("(", "-").lower()
+
+        if chkctx not in contexts:
+            contexts.append(chkctx)
+
+        add_goto_context(current_context, chkctx)
+
+    if agi:
+        chkctx = agi.group(0)
         # e.g. chkctx = Macro(assert_refer_triaged'
         # the below should update chkctx to equal macro macro-assert_refer_triaged
         chkctx = chkctx.replace("(", "-").lower()
