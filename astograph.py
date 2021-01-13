@@ -50,9 +50,6 @@ gotomatch = re.compile(
     r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
 # match things like Macro(voxeoretry
 macromatch = re.compile(r'Macro\([a-zA-Z0-9_]*')
-# TODO do we need to worry about comments? the source file we're parsing has no macro comments on it...
-# could be an early optimization
-# macromatch = re.compile(r'(;?)[^;]+Macro\([a-zA-Z0-9_]*?\((.+)\)\s*(;.*)?$')
 readfrom = sys.stdin
 
 
