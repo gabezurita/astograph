@@ -29,8 +29,8 @@ import pdb
 #       must be correctly split with commas (,)
 # TODO: add switch => support...
 
-# to execute this, run the following: ./astograph.py | dot -Tpng:cairo > graph.png
-
+# to execute this script, run the following:
+# cat path/to/file | ./astograph.py | dot -Tpng:cairo > graph.png
 # for debugging with `pdb.set_trace()`, simply run ./astograph.py
 
 internal_contexts = ['parkedcalls']
@@ -50,8 +50,10 @@ gotomatch = re.compile(
     r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
 # match things like Macro(voxeoretry
 macromatch = re.compile(r'Macro\([a-zA-Z0-9_]*')
+# TODO do we need to worry about comments? the source file we're parsing has no macro comments on it...
+# could be an early optimization
+# macromatch = re.compile(r'(;?)[^;]+Macro\([a-zA-Z0-9_]*?\((.+)\)\s*(;.*)?$')
 readfrom = sys.stdin
-readfrom = open('extensions.conf')
 
 
 def add_goto_context(curctx, newctx):
