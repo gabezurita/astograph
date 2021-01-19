@@ -27,9 +27,9 @@ import pdb
 #       must be correctly split with commas (,)
 # TODO: add switch => support...
 
-# to execute this script, run the following:
+# to execute this script and generate a graph.dot file as well as an accompanying graphviz file, run the following:
 # echo path/to/file | ./astograph.py | dot -Tpng:cairo > graph.png
-# for debugging with `pdb.set_trace()`, simply run ./astograph.py
+# for debugging with `pdb.set_trace()`, simply run `./astograph.py`
 
 internal_contexts = ['parkedcalls']
 
