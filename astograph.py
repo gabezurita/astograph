@@ -18,138 +18,192 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
 import re
 import sys
 import pdb
-
 
 # POINTS OF FAILURE: when a multi-line comment comments out some include and context statements
 # NOTE: the Goto things must be separated correctly with ? (and possibly ':'), and the goto destinations
 #       must be correctly split with commas (,)
 # TODO: add switch => support...
 
-internal_contexts = ['parkedcalls']
+# to execute this script and generate a graph.dot file as well as an accompanying graphviz file, run the following:
+# echo path/to/file | ./astograph.py | dot -Tpng:cairo > graph.png
+# for debugging with `pdb.set_trace()`, simply run `./astograph.py`
 
+internal_contexts = ['parkedcalls']
 
 contexts = []
 links = []
 
 # Match context opening things..
-ctxmatch = re.compile(r'\[([^ ]+)\]')
+context_match = re.compile(r'\[([^ ]+)\]')
 # Match include calls..
-incmatch = re.compile(r'^include ?=> ?([^ ]+)')
+include_match = re.compile(r'^include ?=> ?([^ ]+)')
 # Match Return() calls (consider this section as a macro)
-retmatch = re.compile(r',Return\(\)')
+return_match = re.compile(r',Return\(\)')
 # Peak at Gotos, make sure it's not in comments..
-gotomatch = re.compile(r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
+goto_match = re.compile(
+    r'(;?)[^;]+Goto(If(Time)?)?\((.+)\)\s*(;.*)?$', re.IGNORECASE | re.VERBOSE)
+# Match Macro calls
+macro_match = re.compile(r'Macro\([a-zA-Z0-9_]*')
+# Match AGI calls
+agi_match = re.compile(r'AGI\([a-zA-Z0-9_]*')
 
-readfrom = sys.stdin
-readfrom = open('extensions.conf')
+readfrom = sys.stdin.readline().rstrip()
 
-def add_goto_context(curctx, newctx):
+
+def add_link(current_context, new_context):
     """Just takes the ones with three arguments, and take the first.
     Add only if valid and not already linked within 'links'."""
 
     global contexts
     global links
 
-    spl = newctx.split(',')
+    new_context_split = new_context.split(',')
 
-    if len(spl) == 3:
-        # This is a context where we jump
-        # TODO: add (curctx, spl[0], 'dotted')
-        type1 = (curctx, spl[0])
-        type2 = (curctx, spl[0], 'dotted')
-        if type1 not in links and type2 not in links:
-            links.append((curctx, spl[0], 'dotted'))
+    if not already_linked(current_context, new_context_split) and new_context in contexts:
+        links.append((current_context, new_context_split[0], 'dotted'))
 
-curctx = None
-for l in readfrom.readlines():
-    # TODO: work out the comments (especially the multi-line comments)
-    ctx = ctxmatch.match(l)
-    inc = incmatch.match(l)
-    ret = retmatch.search(l)
-    gto = gotomatch.search(l.strip())
 
-    if ret:
-        # Ok, we were in a Macro, make sure the context is not added.
-        retctx = curctx
+def already_linked(current_context, new_context):
+    global links
 
-        if retctx in contexts:
-            contexts.remove(retctx)
-            
-        # TODO: to be turbo safe, we should check the `links` to make
-        # sure nothing was included from this macro context, but usually,
-        # if you've created them with AEL2, you should never have an `include`
-        # in the macro (or the sub)
+    type1 = (current_context, new_context[0])
+    type2 = (current_context, new_context[0], 'dotted')
 
-        continue
+    return type1 in links or type2 in links
 
-    if ctx:
-        if ctx.group(1) in ['general', 'globals']:
-            curctx = None
+
+def format_context(context):
+    return context.replace("(", "-").lower()
+
+
+def add_context(current_context, contexts):
+    if current_context in ['general', 'globals']:
+        return
+
+    if current_context not in contexts:
+        contexts.append(current_context)
+
+
+current_context = None
+
+with open(readfrom, 'r') as file:
+    for line in file:
+        ctx = context_match.match(line)
+
+        if ctx:
+            current_context = ctx.group(1)
+
+            add_context(current_context, contexts)
+
             continue
 
-        curctx = ctx.group(1)
+    current_context = None
 
-        # Don't add macro- stuff.
-        if curctx.startswith('macro-'):
+    file.seek(0)
+
+    for line in file:
+        # TODO: work out the comments (especially the multi-line comments)
+        ctx = context_match.match(line)
+        inc = include_match.match(line)
+        ret = return_match.search(line)
+        gto = goto_match.search(line.strip())
+        mac = macro_match.search(line)
+        agi = agi_match.search(line)
+
+        if ret:
+            # Ok, we were in a Macro, make sure the context is not added.
+            return_context = current_context
+
+            if return_context in contexts:
+                contexts.remove(return_context)
+
+            # TODO: to be turbo safe, we should check the `links` to make
+            # sure nothing was included from this macro context, but usually,
+            # if you've created them with AEL2, you should never have an `include`
+            # in the macro (or the sub)
+
             continue
 
-        # Don't add it twice.
-        if curctx not in contexts:
-            contexts.append(curctx)
+        if ctx:
 
-        continue
+            current_context = ctx.group(1)
 
-    if inc:
-        if not curctx:
-            raise Exception("include should not happen before a context definition")
-        incctx = inc.group(1)
+            add_context(current_context, contexts)
 
-        # Add the internal contexts if we talk about them (like parkedcalls)OA
-        if incctx in internal_contexts and incctx not in contexts:
-            contexts.append(incctx)
-
-        links.append((curctx, incctx))
-
-        continue
-
-    if gto:
-        # Skip commented out lines with Goto..
-        if gto.group(1) == ';':
             continue
 
-        # Let's parse TIME stuff..
-        if gto.group(3):
-            chkctx = gto.group(4).split('?')[-1]
-            add_goto_context(curctx, chkctx)
-        # Let's do GotoIf parsing..
-        elif gto.group(2):
-            chks = gto.group(4).split('?')[-1].split(':')
-            add_goto_context(curctx, chks[0])
+        if inc:
+            if not current_context:
+                raise Exception(
+                    "include should not happen before a context definition")
+            incctx = inc.group(1)
 
-            # A second possible destination ?
-            if len(chks) == 2:
-                add_goto_context(curctx, chks[1])
+            # Add the internal contexts if we talk about them (like parkedcalls)OA
+            if incctx in internal_contexts:
+                add_context(current_context, contexts)
 
-        # Standard Goto parsing.. go ahead..
-        else:
-            chkctx = gto.group(4)
-            add_goto_context(curctx, chkctx)
-            
-       
-        ### Add links with style=dotted
-        # make sure there's no ';' in front of the Goto
-        # Check from the end the presence of a ? (got GotoIf), then parse the two possibilities, add two
-        # Check the (curctx, gotoctx, '') doesn't exist in links (or as (curctx, gotoctx, 'style=dotted'))
-        # then add it there..
+            links.append((current_context, incctx))
 
-        
+            continue
+
+        if gto:
+            # Skip commented out lines with Goto..
+            if gto.group(1) == ';':
+                continue
+
+            # Let's parse TIME stuff..
+            if gto.group(3):
+                chkctx = gto.group(4).split('?')[-1]
+                add_link(current_context, chkctx)
+            # Let's do GotoIf parsing..
+            elif gto.group(2):
+                chks = gto.group(4).split('?')[-1].split(':')
+                add_link(current_context, chks[0])
+
+                # A second possible destination ?
+                if len(chks) == 2:
+                    add_link(current_context, chks[1])
+            else:
+                chkctx = gto.group(4).split(',')[0]
+
+                add_link(current_context, chkctx)
+
+            # Add links with style=dotted
+            # make sure there's no ';' in front of the Goto
+            # Check from the end the presence of a ? (got GotoIf), then parse the two possibilities, add two
+            # Check the (current_context, gotoctx, '') doesn't exist in links (or as (current_context, gotoctx, 'style=dotted'))
+            # then add it there..
+
+        if mac:
+            # TODO
+            # Skip commented out lines with Macro..
+            # if mac.group(1) == ';':
+            #     continue
+
+            chkctx = mac.group(0)
+            # e.g. chkctx = Macro(assert_refer_triaged
+            # the below should update chkctx to equal macro macro-assert_refer_triaged
+            chkctx = format_context(chkctx)
+
+            add_context(chkctx, contexts)
+
+            add_link(current_context, chkctx)
+
+        if agi:
+            chkctx = agi.group(0)
+            # e.g. chkctx = AGI(get_voxeo_server.php
+            # the below should update chkctx to equal agi-macro-get_voxeo_server
+            chkctx = format_context(chkctx)
+
+            add_context(chkctx, contexts)
+
+            add_link(current_context, chkctx)
+
 dot = []
 dot.append('digraph asterisk {\n')
-#dot.append('  rankdir = LR;\n')
 
 for x in contexts:
     dot.append('  "%s" [label="%s"];\n' % (x, x))
@@ -159,7 +213,10 @@ dot.append('\n')
 for x in links:
     add = ''
     if len(x) == 3:
-        add = ' [style="%s", constraint=false]' % x[2]
+        # TODO, the below is giving me diffuclties.
+        # for hierarchy to work, need some constraint=false, but not always
+        # add = ' [style="%s", constraint=false]' % x[2]
+        add = ' [style="%s"]' % x[2]
     dot.append('  "%s" -> "%s"%s;\n' % (x[0], x[1].strip(), add))
 
 dot.append('}\n')
